@@ -1646,6 +1646,10 @@ function create3DBook() {
 function createDiaryPage(pageNum, photoFiles) {
   const pageGroup = new THREE.Group()
   
+  // Lock page group rotation to prevent any movement
+  pageGroup.rotation.set(0, 0, 0)
+  pageGroup.matrixAutoUpdate = true
+  
   // Page background
   const pageGeo = new THREE.PlaneGeometry(5.5, 7.5)
   const pageMat = new THREE.MeshStandardMaterial({
@@ -1676,7 +1680,7 @@ function createDiaryPage(pageNum, photoFiles) {
         
         if (positions[index]) {
           photo.position.set(...positions[index])
-          photo.rotation.z = (Math.random() - 0.5) * 0.2
+          photo.rotation.set(0, 0, 0) // No rotation - perfectly straight
           pageGroup.add(photo)
         }
       })
@@ -1716,14 +1720,20 @@ function createStickyNote(text, color) {
   canvas.width = 256
   canvas.height = 256
   const ctx = canvas.getContext('2d')
-  ctx.fillStyle = '#333'
-  ctx.font = '24px "Comic Sans MS", cursive'
+  ctx.fillStyle = '#ffffff' // White text
+  ctx.font = 'bold 26px "Comic Sans MS", cursive'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   
+  // Add shadow for better visibility
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.3)'
+  ctx.shadowBlur = 3
+  ctx.shadowOffsetX = 1
+  ctx.shadowOffsetY = 1
+  
   const lines = text.split(' ')
   lines.forEach((line, i) => {
-    ctx.fillText(line, canvas.width / 2, canvas.height / 2 + (i - lines.length / 2) * 30)
+    ctx.fillText(line, canvas.width / 2, canvas.height / 2 + (i - lines.length / 2) * 32)
   })
   
   const textTexture = new THREE.CanvasTexture(canvas)
@@ -2388,44 +2398,27 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
   audio.playbackRate = 0.85 // 15% slower
   
   const startTime = Date.now()
-  const walkDuration = 6000 // Even slower walk (6 seconds)
+  const walkDuration = 6000 // Walk duration (6 seconds)
   
   // Phase 1: NATURAL WALKING from RIGHT with subtle movement
+  let hasReachedCake = false
+  
   const walkToCake = () => {
+    if (hasReachedCake) return // Stop if already reached
+    
     const elapsed = Date.now() - startTime
     const progress = Math.min(elapsed / walkDuration, 1)
     
-    // Smooth easing
-    const eased = 1 - Math.pow(1 - progress, 3)
-    
-    // Walk from RIGHT side with gentle bobbing motion
-    character.position.x = 10 - eased * 9 // Start from RIGHT (10), end at 1
-    
-    // Gentle walking bounce - reduced movement
-    const steps = progress * 10 // Number of steps
-    const stepHeight = Math.abs(Math.sin(steps * Math.PI)) * 0.12 // Reduced from 0.25
-    character.position.y = 1.5 + stepHeight
-    
-    // Move forward smoothly
-    character.position.z = 4 - eased * 3
-    
-    // Subtle sway - much less movement
-    character.rotation.y = Math.sin(steps * Math.PI) * 0.06 // Reduced from 0.15
-    character.rotation.z = Math.sin(steps * Math.PI * 2) * 0.03 // Reduced from 0.08
-    
-    // Very slight tilt
-    character.rotation.x = Math.sin(steps * Math.PI) * 0.02 // Reduced from 0.05
-    
-    if (progress < 1) {
-      requestAnimationFrame(walkToCake)
-    } else {
-      // STOP all movement - set final position
+    if (progress >= 1) {
+      // IMMEDIATELY STOP all movement - set final position
+      hasReachedCake = true
       character.position.x = 1
       character.position.y = 1.5
       character.position.z = 1
       character.rotation.x = 0
       character.rotation.y = 0
       character.rotation.z = 0
+      
       // Phase 2: Eat cake slowly
       // Lower BGM volume when eating sound starts
       const bgm = scene.userData.bgm
@@ -2448,8 +2441,34 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
       
       audio.play().catch(() => {}) // Catch if audio fails
       eatCake()
+      return // Exit after starting eating
     }
+    
+    // Continue walking animation
+    const eased = 1 - Math.pow(1 - progress, 3)
+    
+    // Walk from RIGHT side with gentle bobbing motion
+    character.position.x = 10 - eased * 9 // Start from RIGHT (10), end at 1
+    
+    // Gentle walking bounce - reduced movement
+    const steps = progress * 10 // Number of steps
+    const stepHeight = Math.abs(Math.sin(steps * Math.PI)) * 0.12
+    character.position.y = 1.5 + stepHeight
+    
+    // Move forward smoothly
+    character.position.z = 4 - eased * 3
+    
+    // Subtle sway - much less movement
+    character.rotation.y = Math.sin(steps * Math.PI) * 0.06
+    character.rotation.z = Math.sin(steps * Math.PI * 2) * 0.03
+    
+    // Very slight tilt
+    character.rotation.x = Math.sin(steps * Math.PI) * 0.02
+    
+    requestAnimationFrame(walkToCake)
   }
+  
+  walkToCake()
   
   const eatCake = () => {
     let bites = 0
