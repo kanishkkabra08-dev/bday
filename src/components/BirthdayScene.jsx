@@ -1496,14 +1496,14 @@ function createPhotoDiary(scene, photosRef) {
   // Create pages with real photos and sticky notes
   const pages = []
   const photoFiles = [
-    '/src/photos/WhatsApp Image 2025-12-05 at 11.27.31 AM.jpeg',
-    '/src/photos/WhatsApp Image 2025-12-05 at 11.30.23 AM.jpeg',
-    '/src/photos/WhatsApp Image 2025-12-05 at 11.41.23 AM.jpeg',
-    '/src/photos/WhatsApp Image 2025-12-05 at 11.43.59 AM.jpeg',
-    '/src/photos/WhatsApp Image 2025-12-05 at 2.29.34 PM (1).jpeg',
-    '/src/photos/WhatsApp Image 2025-12-05 at 2.29.34 PM.jpeg',
-    '/src/photos/WhatsApp Image 2025-12-05 at 2.29.35 PM (1).jpeg',
-    '/src/photos/WhatsApp Image 2025-12-05 at 2.29.35 PM.jpeg'
+    '/photos/WhatsApp Image 2025-12-05 at 11.27.31 AM.jpeg',
+    '/photos/WhatsApp Image 2025-12-05 at 11.30.23 AM.jpeg',
+    '/photos/WhatsApp Image 2025-12-05 at 11.41.23 AM.jpeg',
+    '/photos/WhatsApp Image 2025-12-05 at 11.43.59 AM.jpeg',
+    '/photos/WhatsApp Image 2025-12-05 at 2.29.34 PM (1).jpeg',
+    '/photos/WhatsApp Image 2025-12-05 at 2.29.34 PM.jpeg',
+    '/photos/WhatsApp Image 2025-12-05 at 2.29.35 PM (1).jpeg',
+    '/photos/WhatsApp Image 2025-12-05 at 2.29.35 PM.jpeg'
   ]
   
   // Create 3 pages
@@ -2220,7 +2220,7 @@ function createCakePiece(scene) {
 function createCharacter(scene) {
   // Load first photo as character - BIGGER SIZE
   const loader = new THREE.TextureLoader()
-  const texture = loader.load('/src/photos/WhatsApp Image 2025-12-05 at 11.27.31 AM.jpeg')
+  const texture = loader.load('/photos/WhatsApp Image 2025-12-05 at 11.27.31 AM.jpeg')
   
   const geometry = new THREE.PlaneGeometry(2.5, 3.5) // Much bigger!
   const material = new THREE.MeshBasicMaterial({ 
@@ -2236,7 +2236,7 @@ function createCharacter(scene) {
 
 function animateCharacterEating(character, cakePiece, scene, onComplete) {
   // Load eating sound and slow it down by 15%
-  const audio = new Audio('/src/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
+  const audio = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
   audio.playbackRate = 0.85 // 15% slower
   
   const startTime = Date.now()
