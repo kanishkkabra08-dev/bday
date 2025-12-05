@@ -25,6 +25,7 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
   const clockRef = useRef(new THREE.Clock())
   const isDraggingKnifeRef = useRef(false)
   const dragPlaneRef = useRef(null)
+  const bgmRef = useRef(null)
 
   // Initialize scene once
   useEffect(() => {
@@ -33,6 +34,26 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x0a0015) // Deep space purple
     sceneRef.current = scene
+    
+    // Initialize background music
+    const bgm = new Audio('/audio/Perfect-(Mr-Jat.in).mp3')
+    bgm.loop = true
+    bgm.volume = 0.4 // Start at 40% volume
+    bgmRef.current = bgm
+    
+    // Start playing BGM (with user interaction handling)
+    const startBGM = () => {
+      bgm.play().catch(() => {
+        // If autoplay is blocked, try again on first user interaction
+        document.addEventListener('click', () => {
+          bgm.play().catch(() => {})
+        }, { once: true })
+      })
+    }
+    startBGM()
+    
+    // Store BGM in scene for access by other functions
+    scene.userData.bgm = bgm
     
     // Add cosmic vortex background
     createCosmicVortexBackground(scene)
@@ -43,16 +64,28 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
       0.1,
       1000
     )
-    camera.position.set(0, 5, 10)
+    
+    // Responsive camera positioning
+    const isMobile = window.innerWidth <= 768
+    const isSmallMobile = window.innerWidth <= 480
+    
+    if (isSmallMobile) {
+      camera.position.set(0, 5, 14) // Further back for small phones
+    } else if (isMobile) {
+      camera.position.set(0, 5, 12) // Further back for tablets
+    } else {
+      camera.position.set(0, 5, 10) // Desktop
+    }
+    
     cameraRef.current = camera
 
     const renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
+      antialias: !isMobile, // Disable antialiasing on mobile for performance
       powerPreference: "high-performance"
     })
     renderer.setSize(window.innerWidth, window.innerHeight)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)) // Limit pixel ratio for performance
-    renderer.shadowMap.enabled = true
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2)) // Lower pixel ratio on mobile
+    renderer.shadowMap.enabled = !isSmallMobile // Disable shadows on small phones for performance
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.outputColorSpace = THREE.SRGBColorSpace
     mountRef.current.appendChild(renderer.domElement)
@@ -61,8 +94,26 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.05
-    controls.minDistance = 5
-    controls.maxDistance = 20
+    
+    // Responsive control limits
+    if (isSmallMobile) {
+      controls.minDistance = 8
+      controls.maxDistance = 25
+    } else if (isMobile) {
+      controls.minDistance = 6
+      controls.maxDistance = 22
+    } else {
+      controls.minDistance = 5
+      controls.maxDistance = 20
+    }
+    
+    // Enable touch controls for mobile
+    controls.enablePan = !isMobile // Disable panning on mobile
+    controls.touches = {
+      ONE: THREE.TOUCH.ROTATE,
+      TWO: THREE.TOUCH.DOLLY_PAN
+    }
+    
     controlsRef.current = controls
     
     // Store camera, controls, and onStepChange in scene for diary access
@@ -101,6 +152,26 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
       camera.aspect = window.innerWidth / window.innerHeight
       camera.updateProjectionMatrix()
       renderer.setSize(window.innerWidth, window.innerHeight)
+      
+      // Adjust camera position based on screen size
+      const isMobile = window.innerWidth <= 768
+      const isSmallMobile = window.innerWidth <= 480
+      
+      if (isSmallMobile) {
+        camera.position.z = 14
+        controls.minDistance = 8
+        controls.maxDistance = 25
+      } else if (isMobile) {
+        camera.position.z = 12
+        controls.minDistance = 6
+        controls.maxDistance = 22
+      } else {
+        camera.position.z = 10
+        controls.minDistance = 5
+        controls.maxDistance = 20
+      }
+      
+      controls.update()
     }
     window.addEventListener('resize', handleResize)
 
@@ -150,20 +221,8 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
       
       // Animate photo diary - NO AUTO ROTATION, only on click
       if (photoDiaryRef.current && phaseRef.current === 'photos') {
-        // Removed auto-rotation - diary stays still, pages only turn on click
-        
-        const time = clockRef.current.elapsedTime
-        photosRef.current.forEach((photo) => {
-          if (photo.userData.floatOffset !== undefined) {
-            const floatOffset = Math.sin(time * photo.userData.floatSpeed + photo.userData.floatOffset) * 0.15
-            const originalY = photo.position.y
-            photo.position.y += floatOffset * 0.01
-            
-            // Gentle rotation
-            photo.rotation.x = Math.sin(time * 0.5 + photo.userData.floatOffset) * 0.05
-            photo.rotation.z = Math.cos(time * 0.3 + photo.userData.floatOffset) * 0.03
-          }
-        })
+        // Diary and photos stay completely still - no shaking or movement
+        // Pages only turn on user click
       }
 
       // Knife idle animation during cut phase
@@ -227,6 +286,11 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
       }
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement)
+      }
+      // Stop and cleanup BGM
+      if (bgmRef.current) {
+        bgmRef.current.pause()
+        bgmRef.current = null
       }
       renderer.dispose()
     }
@@ -923,31 +987,42 @@ function createSmoke(position, scene) {
 }
 
 function startFireworks(scene) {
-  // AMAZING DIWALI-STYLE FIREWORKS - Very visible and cool!
-  const fireworkTypes = ['burst', 'willow', 'palm', 'ring', 'heart', 'spiral']
-  const bursts = 20 // Even more fireworks!
-  const interval = 250 // Fast succession
+  // DIWALI-STYLE FIREWORKS - Colorful, bright, and festive!
+  const fireworkTypes = ['burst', 'willow', 'palm', 'ring', 'chrysanthemum', 'peony']
+  const bursts = 15 // Aesthetic amount
+  const interval = 350 // Slightly slower for better visibility
+  
+  // Diwali color palette - vibrant and festive
+  const diwaliColors = [
+    [0xff6b35, 0xffd700], // Orange-Gold
+    [0xff1493, 0xff69b4], // Pink-HotPink
+    [0x00ff00, 0x32cd32], // Green-LimeGreen
+    [0x4169e1, 0x87ceeb], // Blue-SkyBlue
+    [0xff4500, 0xffa500], // Red-Orange
+    [0x9370db, 0xda70d6], // Purple-Orchid
+  ]
   
   for (let i = 0; i < bursts; i++) {
     setTimeout(() => {
-      // Launch 2-4 fireworks simultaneously for spectacular effect
-      const simultaneous = 2 + Math.floor(Math.random() * 3)
+      // Launch 2-3 fireworks simultaneously
+      const simultaneous = 2 + Math.floor(Math.random() * 2)
       for (let j = 0; j < simultaneous; j++) {
         const type = fireworkTypes[Math.floor(Math.random() * fireworkTypes.length)]
+        const colorPair = diwaliColors[Math.floor(Math.random() * diwaliColors.length)]
         const position = new THREE.Vector3(
-          (Math.random() - 0.5) * 8, // Narrower spread (was 12)
-          4 + Math.random() * 3, // Lower in sky (was 8-12, now 4-7)
-          (Math.random() - 0.5) * 6 // Closer to camera (was 12)
+          (Math.random() - 0.5) * 7,
+          3.5 + Math.random() * 2.5, // Height 3.5-6
+          (Math.random() - 0.5) * 5
         )
-        launchFirework(scene, position, type)
+        launchFirework(scene, position, type, colorPair)
       }
     }, i * interval)
   }
 }
 
-function launchFirework(scene, position, type) {
-  // Launch trail
-  createFireworkTrail(scene, position)
+function launchFirework(scene, position, type, colorPair = [0xffd700, 0xffa500]) {
+  // Launch trail with color
+  createFireworkTrail(scene, position, colorPair[0])
   
   // Main explosion after short delay
   setTimeout(() => {
@@ -976,7 +1051,7 @@ function launchFirework(scene, position, type) {
   }, 300)
 }
 
-function createFireworkTrail(scene, targetPos) {
+function createFireworkTrail(scene, targetPos, color = 0xffaa00) {
   const particleCount = 30
   const positions = new Float32Array(particleCount * 3)
   const startY = -2
@@ -991,7 +1066,7 @@ function createFireworkTrail(scene, targetPos) {
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
   
   const material = new THREE.PointsMaterial({
-    color: 0xffaa00,
+    color: color,
     size: 0.15,
     transparent: true,
     opacity: 0.9,
@@ -1610,8 +1685,8 @@ function createDiaryPage(pageNum, photoFiles) {
   
   // Add sticky notes
   const stickyNotes = [
-    { text: 'Best day ever!', color: 0xffff99, pos: [-1.5, -2.5] },
-    { text: 'Love this moment!', color: 0xffb3d9, pos: [1.5, -2.5] }
+    { text: 'Happy birthday Omani!', color: 0xffff99, pos: [-1.5, -2.5] },
+    { text: 'Bakwas nhi krunga!', color: 0xffb3d9, pos: [1.5, -2.5] }
   ]
   
   stickyNotes.forEach(note => {
@@ -1940,19 +2015,39 @@ function beginCutScene(scene, onStepChange, knifeRef, cutStartRef, phaseRef, sce
   onStepChange(1.5)
   
   const knife = createKnife()
-  // Position knife HIGH ABOVE cake, pointing DOWN vertically
-  knife.position.set(0, 5, 0) // Much higher above cake (cake top is around y=2)
+  // Position knife FAR AWAY from cake initially
+  knife.position.set(-8, 6, 3) // Start far to the left and above
   knife.rotation.x = 0
   knife.rotation.y = 0  
   knife.rotation.z = Math.PI / 2 // Rotate so knife is vertical (blade points down)
   scene.add(knife)
   knifeRef.current = knife
   
-  // NO DRAG PLANE - automatic cutting!
-  // Start cutting animation automatically after a short delay
-  setTimeout(() => {
-    finishCutScene(onStepChange, sceneRef, knifeRef, phaseRef, vortexRef, vortexStartRef, dragPlaneRef, cakeRef)
-  }, 1000)
+  // Animate knife moving to cake position first
+  const moveStart = Date.now()
+  const moveDuration = 2000
+  
+  const moveKnifeToCake = () => {
+    const elapsed = Date.now() - moveStart
+    const progress = Math.min(elapsed / moveDuration, 1)
+    const eased = 1 - Math.pow(1 - progress, 3)
+    
+    // Move knife from far away to above cake
+    knife.position.x = -8 + eased * 8 // Move to x=0
+    knife.position.y = 6 - eased * 1 // Move to y=5
+    knife.position.z = 3 - eased * 3 // Move to z=0
+    
+    if (progress < 1) {
+      requestAnimationFrame(moveKnifeToCake)
+    } else {
+      // Now start cutting
+      setTimeout(() => {
+        finishCutScene(onStepChange, sceneRef, knifeRef, phaseRef, vortexRef, vortexStartRef, dragPlaneRef, cakeRef)
+      }, 500)
+    }
+  }
+  
+  moveKnifeToCake()
 }
 
 function finishCutScene(onStepChange, sceneRef, knifeRef, phaseRef, vortexRef, vortexStartRef, dragPlaneRef, cakeRef) {
@@ -2021,21 +2116,26 @@ function animateFirstCut(knife, scene, onComplete) {
 }
 
 function animateSecondCut(knife, scene, onComplete) {
-  // Rotate knife 90 degrees for second cut - SMOOTH
-  const startTime = Date.now()
-  const rotateDuration = 900
+  // Move knife to a different position and rotate for second cut
+  const moveStart = Date.now()
+  const moveDuration = 800
   
-  const rotate = () => {
-    const elapsed = Date.now() - startTime
-    const progress = Math.min(elapsed / rotateDuration, 1)
+  const moveToSecondPosition = () => {
+    const elapsed = Date.now() - moveStart
+    const progress = Math.min(elapsed / moveDuration, 1)
     const eased = 1 - Math.pow(1 - progress, 3)
+    
+    // Move knife to the side for perpendicular cut
+    knife.position.x = eased * 1.2 // Move to x=1.2 (different position)
+    knife.position.z = eased * 0.8 // Slight forward movement
+    
     // Rotate around Z-axis to change cutting direction (perpendicular cut)
     knife.rotation.z = (Math.PI / 2) + (eased * Math.PI / 2)
     
     if (progress < 1) {
-      requestAnimationFrame(rotate)
+      requestAnimationFrame(moveToSecondPosition)
     } else {
-      // Second cut - cut down again SMOOTHLY
+      // Second cut - cut down again SMOOTHLY at new position
       const cutStart = Date.now()
       const cutDuration = 1800
       
@@ -2055,7 +2155,7 @@ function animateSecondCut(knife, scene, onComplete) {
       cut()
     }
   }
-  rotate()
+  moveToSecondPosition()
 }
 
 function extractSliceAndMoveCake(cake, scene, onStepChange, vortexRef, vortexStartRef, phaseRef) {
@@ -2160,37 +2260,45 @@ function createCakeSliceEffect(scene) {
 }
 
 function createCakePiece(scene) {
-  // Create a SOLID triangular cake slice - ZERO GAPS
+  // Create a CUTE triangular cake slice with decorations
   const group = new THREE.Group()
   
   // Create 3 layers stacked perfectly with NO gaps
   const layerHeight = 0.5
-  const colors = [0x3b2a24, 0xfce4ed, 0xfffbf4]
-  const frostingColors = [0xffdfe8, 0xffa6c7, 0xff9fba]
+  const colors = [0x8b4513, 0xffb6d9, 0xfff0f5] // Chocolate, pink, cream
+  const frostingColors = [0xffc0e3, 0xffaad4, 0xff99cc]
   
   for (let layer = 0; layer < 3; layer++) {
-    // Cake layer shape
+    // Cake layer shape - slightly rounded for cuteness
     const shape = new THREE.Shape()
     shape.moveTo(0, 0)
     shape.lineTo(1.5, 0)
     shape.lineTo(0.75, 1.2)
     shape.closePath()
     
-    // Solid layer
-    const extrudeSettings = { depth: layerHeight, bevelEnabled: false }
+    // Solid layer with bevel for smooth edges
+    const extrudeSettings = { 
+      depth: layerHeight, 
+      bevelEnabled: true,
+      bevelThickness: 0.02,
+      bevelSize: 0.02,
+      bevelSegments: 3
+    }
     const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings)
     const material = new THREE.MeshStandardMaterial({ 
       color: colors[layer],
-      roughness: 0.4,
-      metalness: 0.1
+      roughness: 0.5,
+      metalness: 0.05
     })
     
     const cakeLayer = new THREE.Mesh(geometry, material)
     cakeLayer.rotation.x = Math.PI / 2
-    cakeLayer.position.y = layer * layerHeight // Stack perfectly
+    cakeLayer.position.y = layer * layerHeight
+    cakeLayer.castShadow = true
+    cakeLayer.receiveShadow = true
     group.add(cakeLayer)
     
-    // Thin frosting on top of each layer (except last)
+    // Thick creamy frosting between layers
     if (layer < 2) {
       const frostingShape = new THREE.Shape()
       frostingShape.moveTo(0, 0)
@@ -2198,18 +2306,58 @@ function createCakePiece(scene) {
       frostingShape.lineTo(0.75, 1.2)
       frostingShape.closePath()
       
-      const frostingGeo = new THREE.ExtrudeGeometry(frostingShape, { depth: 0.03, bevelEnabled: false })
+      const frostingGeo = new THREE.ExtrudeGeometry(frostingShape, { depth: 0.08, bevelEnabled: false })
       const frostingMat = new THREE.MeshStandardMaterial({ 
         color: frostingColors[layer],
         emissive: frostingColors[layer],
-        emissiveIntensity: 0.3,
-        roughness: 0.2
+        emissiveIntensity: 0.4,
+        roughness: 0.15,
+        metalness: 0.05
       })
       const frosting = new THREE.Mesh(frostingGeo, frostingMat)
       frosting.rotation.x = Math.PI / 2
-      frosting.position.y = (layer + 1) * layerHeight // Right on top of layer
+      frosting.position.y = (layer + 1) * layerHeight
       group.add(frosting)
     }
+  }
+  
+  // Add cute decorations on top
+  // Little strawberry on top
+  const strawberryGeo = new THREE.SphereGeometry(0.12, 8, 8)
+  const strawberryMat = new THREE.MeshStandardMaterial({
+    color: 0xff3366,
+    emissive: 0xff3366,
+    emissiveIntensity: 0.3,
+    roughness: 0.4
+  })
+  const strawberry = new THREE.Mesh(strawberryGeo, strawberryMat)
+  strawberry.position.set(0.75, 1.55, 0.6)
+  strawberry.scale.set(1, 1.2, 1)
+  group.add(strawberry)
+  
+  // Green leaf on strawberry
+  const leafGeo = new THREE.ConeGeometry(0.08, 0.06, 5)
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x228b22 })
+  const leaf = new THREE.Mesh(leafGeo, leafMat)
+  leaf.position.set(0.75, 1.62, 0.6)
+  leaf.rotation.x = Math.PI
+  group.add(leaf)
+  
+  // Cute sparkles around slice
+  for (let i = 0; i < 5; i++) {
+    const sparkleGeo = new THREE.OctahedronGeometry(0.04, 0)
+    const sparkleMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.8
+    })
+    const sparkle = new THREE.Mesh(sparkleGeo, sparkleMat)
+    sparkle.position.set(
+      Math.random() * 1.5,
+      Math.random() * 1.5,
+      Math.random() * 1.2
+    )
+    group.add(sparkle)
   }
   
   group.position.set(0, 0, 0)
@@ -2242,7 +2390,7 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
   const startTime = Date.now()
   const walkDuration = 6000 // Even slower walk (6 seconds)
   
-  // Phase 1: VERY SLOW walk from side with varied movement
+  // Phase 1: NATURAL WALKING from RIGHT with subtle movement
   const walkToCake = () => {
     const elapsed = Date.now() - startTime
     const progress = Math.min(elapsed / walkDuration, 1)
@@ -2250,18 +2398,54 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
     // Smooth easing
     const eased = 1 - Math.pow(1 - progress, 3)
     
-    // Walk from far away, moving up and down naturally
-    character.position.x = 10 - eased * 9 // Start from 10, end at 1
-    character.position.y = 1.5 + Math.sin(progress * Math.PI * 5) * 0.12 // Gentle bounce
-    character.position.z = 4 - eased * 3 // Move forward too
+    // Walk from RIGHT side with gentle bobbing motion
+    character.position.x = 10 - eased * 9 // Start from RIGHT (10), end at 1
     
-    // Slight rotation as walking
-    character.rotation.y = Math.sin(progress * Math.PI * 3) * 0.08
+    // Gentle walking bounce - reduced movement
+    const steps = progress * 10 // Number of steps
+    const stepHeight = Math.abs(Math.sin(steps * Math.PI)) * 0.12 // Reduced from 0.25
+    character.position.y = 1.5 + stepHeight
+    
+    // Move forward smoothly
+    character.position.z = 4 - eased * 3
+    
+    // Subtle sway - much less movement
+    character.rotation.y = Math.sin(steps * Math.PI) * 0.06 // Reduced from 0.15
+    character.rotation.z = Math.sin(steps * Math.PI * 2) * 0.03 // Reduced from 0.08
+    
+    // Very slight tilt
+    character.rotation.x = Math.sin(steps * Math.PI) * 0.02 // Reduced from 0.05
     
     if (progress < 1) {
       requestAnimationFrame(walkToCake)
     } else {
+      // STOP all movement - set final position
+      character.position.x = 1
+      character.position.y = 1.5
+      character.position.z = 1
+      character.rotation.x = 0
+      character.rotation.y = 0
+      character.rotation.z = 0
       // Phase 2: Eat cake slowly
+      // Lower BGM volume when eating sound starts
+      const bgm = scene.userData.bgm
+      if (bgm) {
+        const fadeOutStart = Date.now()
+        const fadeOutDuration = 500
+        const originalVolume = bgm.volume
+        
+        const fadeOut = () => {
+          const elapsed = Date.now() - fadeOutStart
+          const progress = Math.min(elapsed / fadeOutDuration, 1)
+          bgm.volume = originalVolume * (1 - progress * 0.85) // Lower to 15% of original (much quieter)
+          
+          if (progress < 1) {
+            requestAnimationFrame(fadeOut)
+          }
+        }
+        fadeOut()
+      }
+      
       audio.play().catch(() => {}) // Catch if audio fails
       eatCake()
     }
@@ -2302,6 +2486,26 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
         // Remove cake piece
         scene.remove(cakePiece)
         
+        // Restore BGM volume after eating ends
+        const bgm = scene.userData.bgm
+        if (bgm) {
+          const fadeInStart = Date.now()
+          const fadeInDuration = 1000
+          const currentVolume = bgm.volume
+          const targetVolume = 0.4 // Original volume
+          
+          const fadeIn = () => {
+            const elapsed = Date.now() - fadeInStart
+            const progress = Math.min(elapsed / fadeInDuration, 1)
+            bgm.volume = currentVolume + (targetVolume - currentVolume) * progress
+            
+            if (progress < 1) {
+              requestAnimationFrame(fadeIn)
+            }
+          }
+          fadeIn()
+        }
+        
         // Show "Happiest Birthday Kareena" message
         if (scene.userData.onStepChange) {
           scene.userData.onStepChange(2.5)
@@ -2330,8 +2534,11 @@ function beginWish(onStepChange, scene, cakePiece, vortexRef, vortexStartRef, ph
   
   // Animate eating sequence
   animateCharacterEating(character, cakePiece, scene, () => {
-    // After eating, show fireworks then diary (NO VORTEX)
+    // After eating, show fireworks, balloons, and confetti
     startFireworks(scene)
+    createBalloons(scene)
+    createConfetti(scene)
+    
     setTimeout(() => {
       // Go straight to diary
       phaseRef.current = 'photos'
@@ -2507,19 +2714,20 @@ function createNotes(scene, notesRef) {
   notesRef.current = [notes]
   
   // Animate notes
-  const animateNotes = () => {
-    if (notes.parent) {
-      const time = Date.now() * 0.001
-      notes.children.forEach((note) => {
-        const float = Math.sin(time * note.userData.floatSpeed + note.userData.floatOffset) * 0.1
-        note.position.y += float * 0.01
-        note.rotation.x = Math.sin(time * 0.5 + note.userData.floatOffset) * 0.08
-        note.rotation.z = Math.cos(time * 0.3 + note.userData.floatOffset) * 0.05
-      })
-      requestAnimationFrame(animateNotes)
-    }
-  }
-  animateNotes()
+  // Notes stay still - no animation for better readability
+  // const animateNotes = () => {
+  //   if (notes.parent) {
+  //     const time = Date.now() * 0.001
+  //     notes.children.forEach((note) => {
+  //       const float = Math.sin(time * note.userData.floatSpeed + note.userData.floatOffset) * 0.1
+  //       note.position.y += float * 0.01
+  //       note.rotation.x = Math.sin(time * 0.5 + note.userData.floatOffset) * 0.08
+  //       note.rotation.z = Math.cos(time * 0.3 + note.userData.floatOffset) * 0.05
+  //     })
+  //     requestAnimationFrame(animateNotes)
+  //   }
+  // }
+  // animateNotes()
 }
 
 function createNote3D(text, index) {
@@ -2560,17 +2768,22 @@ function createNote3D(text, index) {
   ctx.lineWidth = 8
   ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40)
   
-  // Text
-  ctx.fillStyle = '#8b4513'
-  ctx.font = 'bold 42px "Gloria Hallelujah", cursive'
+  // Text - larger and more visible
+  ctx.fillStyle = '#2c1810'
+  ctx.font = 'bold 48px "Gloria Hallelujah", cursive'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   
   const lines = text.split('\n')
-  const lineHeight = 60
+  const lineHeight = 65
   const startY = canvas.height / 2 - ((lines.length - 1) * lineHeight) / 2
   
   lines.forEach((line, i) => {
+    // Add text shadow for better visibility
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)'
+    ctx.shadowBlur = 4
+    ctx.shadowOffsetX = 2
+    ctx.shadowOffsetY = 2
     ctx.fillText(line, canvas.width / 2, startY + i * lineHeight)
   })
   
@@ -2644,6 +2857,144 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   lines.push(line)
   const startY = y - (lines.length - 1) * (lineHeight / 2)
   lines.forEach((l, i) => ctx.fillText(l, x, startY + i * lineHeight))
+}
+
+function createBalloons(scene) {
+  // Create aesthetic floating balloons
+  const balloonColors = [0xff69b4, 0x87ceeb, 0xffd700, 0xff6347, 0x98fb98, 0xda70d6]
+  const balloonCount = 12
+  
+  for (let i = 0; i < balloonCount; i++) {
+    const balloonGroup = new THREE.Group()
+    
+    // Balloon body
+    const balloonGeo = new THREE.SphereGeometry(0.3, 16, 16)
+    balloonGeo.scale(1, 1.3, 1) // Elongate
+    const balloonMat = new THREE.MeshStandardMaterial({
+      color: balloonColors[i % balloonColors.length],
+      emissive: balloonColors[i % balloonColors.length],
+      emissiveIntensity: 0.3,
+      roughness: 0.3,
+      metalness: 0.1
+    })
+    const balloon = new THREE.Mesh(balloonGeo, balloonMat)
+    balloonGroup.add(balloon)
+    
+    // Balloon knot
+    const knotGeo = new THREE.SphereGeometry(0.05, 8, 8)
+    const knotMat = new THREE.MeshStandardMaterial({ color: 0x333333 })
+    const knot = new THREE.Mesh(knotGeo, knotMat)
+    knot.position.y = -0.4
+    balloonGroup.add(knot)
+    
+    // String
+    const stringGeo = new THREE.CylinderGeometry(0.01, 0.01, 1.5, 4)
+    const stringMat = new THREE.MeshBasicMaterial({ color: 0x666666 })
+    const string = new THREE.Mesh(stringGeo, stringMat)
+    string.position.y = -1.15
+    balloonGroup.add(string)
+    
+    // Position balloons around the scene
+    const angle = (i / balloonCount) * Math.PI * 2
+    const radius = 6 + Math.random() * 2
+    balloonGroup.position.set(
+      Math.cos(angle) * radius,
+      -3 + Math.random() * 2,
+      Math.sin(angle) * radius
+    )
+    
+    scene.add(balloonGroup)
+    
+    // Animate balloons floating up
+    const startTime = Date.now()
+    const duration = 8000 + Math.random() * 4000
+    const floatSpeed = 0.3 + Math.random() * 0.2
+    
+    const animateBalloon = () => {
+      const elapsed = Date.now() - startTime
+      if (elapsed < duration && balloonGroup.parent) {
+        balloonGroup.position.y += floatSpeed * 0.016
+        balloonGroup.rotation.z = Math.sin(elapsed * 0.001) * 0.1
+        requestAnimationFrame(animateBalloon)
+      } else if (balloonGroup.parent) {
+        scene.remove(balloonGroup)
+      }
+    }
+    
+    setTimeout(() => animateBalloon(), i * 100)
+  }
+}
+
+function createConfetti(scene) {
+  // Create aesthetic confetti particles
+  const confettiCount = 150
+  const confettiColors = [0xff69b4, 0xffd700, 0x87ceeb, 0xff6347, 0x98fb98, 0xda70d6, 0xffa500]
+  
+  for (let i = 0; i < confettiCount; i++) {
+    const confettiGeo = new THREE.PlaneGeometry(0.1, 0.15)
+    const confettiMat = new THREE.MeshBasicMaterial({
+      color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9
+    })
+    const confetti = new THREE.Mesh(confettiGeo, confettiMat)
+    
+    // Start position - above and around
+    confetti.position.set(
+      (Math.random() - 0.5) * 12,
+      8 + Math.random() * 3,
+      (Math.random() - 0.5) * 12
+    )
+    
+    confetti.rotation.set(
+      Math.random() * Math.PI,
+      Math.random() * Math.PI,
+      Math.random() * Math.PI
+    )
+    
+    scene.add(confetti)
+    
+    // Animate confetti falling
+    const velocity = {
+      x: (Math.random() - 0.5) * 0.02,
+      y: -(0.03 + Math.random() * 0.02),
+      z: (Math.random() - 0.5) * 0.02
+    }
+    
+    const rotationSpeed = {
+      x: (Math.random() - 0.5) * 0.1,
+      y: (Math.random() - 0.5) * 0.1,
+      z: (Math.random() - 0.5) * 0.1
+    }
+    
+    const startTime = Date.now()
+    const duration = 6000
+    
+    const animateConfetti = () => {
+      const elapsed = Date.now() - startTime
+      if (elapsed < duration && confetti.parent) {
+        confetti.position.x += velocity.x
+        confetti.position.y += velocity.y
+        confetti.position.z += velocity.z
+        
+        confetti.rotation.x += rotationSpeed.x
+        confetti.rotation.y += rotationSpeed.y
+        confetti.rotation.z += rotationSpeed.z
+        
+        // Fade out near the end
+        if (elapsed > duration * 0.7) {
+          confetti.material.opacity = 0.9 * (1 - (elapsed - duration * 0.7) / (duration * 0.3))
+        }
+        
+        requestAnimationFrame(animateConfetti)
+      } else if (confetti.parent) {
+        scene.remove(confetti)
+      }
+    }
+    
+    setTimeout(() => animateConfetti(), i * 10)
+  }
 }
 
 export default BirthdayScene

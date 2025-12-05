@@ -11,6 +11,10 @@ body {
     background: #000000;
     font-family: 'Gloria Hallelujah', 'Caveat', cursive;
     color: #ffffff;
+    touch-action: none; /* Prevent default touch behaviors */
+    -webkit-touch-callout: none; /* Disable callout on iOS */
+    -webkit-user-select: none; /* Disable text selection */
+    user-select: none;
 }
 
 #root {
@@ -119,6 +123,83 @@ body {
     100% {
         opacity: 1;
         transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+/* Responsive styles for tablets and smaller */
+@media (max-width: 768px) {
+    .instruction {
+        font-size: 20px;
+        bottom: 20px;
+        padding: 0 20px;
+        max-width: 90%;
+    }
+
+    .handwriting {
+        font-size: 48px;
+    }
+
+    .name {
+        font-size: 64px;
+    }
+
+    .loading-text {
+        font-size: 32px;
+        padding: 0 20px;
+    }
+
+    .photo-info {
+        font-size: 18px;
+        bottom: 80px;
+        padding: 0 20px;
+        max-width: 90%;
+    }
+}
+
+/* Responsive styles for mobile phones */
+@media (max-width: 480px) {
+    .instruction {
+        font-size: 16px;
+        bottom: 15px;
+        padding: 0 15px;
+    }
+
+    .handwriting {
+        font-size: 36px;
+        margin: 5px 0;
+    }
+
+    .name {
+        font-size: 48px;
+    }
+
+    .loading-text {
+        font-size: 24px;
+    }
+
+    .photo-info {
+        font-size: 14px;
+        bottom: 60px;
+    }
+}
+
+/* Landscape mobile orientation */
+@media (max-height: 500px) and (orientation: landscape) {
+    .instruction {
+        font-size: 14px;
+        bottom: 10px;
+    }
+
+    .handwriting {
+        font-size: 28px;
+    }
+
+    .name {
+        font-size: 36px;
+    }
+
+    .birthday-message {
+        top: 45%;
     }
 }
 
