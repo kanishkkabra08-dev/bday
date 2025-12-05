@@ -35,22 +35,37 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
     scene.background = new THREE.Color(0x0a0015) // Deep space purple
     sceneRef.current = scene
     
-    // Initialize background music
+    // Initialize background music with mobile support
     const bgm = new Audio('/audio/Perfect-(Mr-Jat.in).mp3')
     bgm.loop = true
     bgm.volume = 0.4 // Start at 40% volume
+    bgm.setAttribute('playsinline', '')
+    bgm.setAttribute('webkit-playsinline', '')
+    bgm.preload = 'auto'
     bgmRef.current = bgm
     
-    // Start playing BGM (with user interaction handling)
+    // Start playing BGM (with user interaction handling for mobile)
     const startBGM = () => {
-      bgm.play().catch(() => {
-        // If autoplay is blocked, try again on first user interaction
-        document.addEventListener('click', () => {
-          bgm.play().catch(() => {})
-        }, { once: true })
-      })
+      const playPromise = bgm.play()
+      
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          console.log('BGM autoplay blocked, waiting for user interaction')
+          // If autoplay is blocked, try again on first user interaction
+          const playOnInteraction = () => {
+            bgm.play().catch(() => console.log('BGM play failed'))
+            document.removeEventListener('click', playOnInteraction)
+            document.removeEventListener('touchstart', playOnInteraction)
+          }
+          
+          document.addEventListener('click', playOnInteraction, { once: true })
+          document.addEventListener('touchstart', playOnInteraction, { once: true })
+        })
+      }
     }
-    startBGM()
+    
+    // Delay BGM start slightly to improve loading
+    setTimeout(startBGM, 500)
     
     // Store BGM in scene for access by other functions
     scene.userData.bgm = bgm
@@ -275,12 +290,14 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
       }
     }
     
-    // Handle clicks only (no knife dragging - automatic cutting)
+    // Handle clicks and touches (mobile support)
     renderer.domElement.addEventListener('click', handleClick)
+    renderer.domElement.addEventListener('touchend', handleClick)
 
     return () => {
       window.removeEventListener('resize', handleResize)
       renderer.domElement.removeEventListener('click', handleClick)
+      renderer.domElement.removeEventListener('touchend', handleClick)
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
       }
@@ -2397,6 +2414,13 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
   const audio = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
   audio.playbackRate = 0.85 // 15% slower
   
+  // Preload audio for better mobile support
+  audio.load()
+  
+  // Enable audio on mobile by setting attributes
+  audio.setAttribute('playsinline', '')
+  audio.setAttribute('webkit-playsinline', '')
+  
   const startTime = Date.now()
   const walkDuration = 6000 // Walk duration (6 seconds)
   
@@ -2439,7 +2463,18 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
         fadeOut()
       }
       
-      audio.play().catch(() => {}) // Catch if audio fails
+      // Try to play audio with better mobile support
+      const playAudio = () => {
+        audio.play().catch((error) => {
+          console.log('Audio play failed, retrying...', error)
+          // Retry after a short delay
+          setTimeout(() => {
+            audio.play().catch(() => console.log('Audio play failed again'))
+          }, 100)
+        })
+      }
+      
+      playAudio()
       eatCake()
       return // Exit after starting eating
     }
