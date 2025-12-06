@@ -1595,12 +1595,16 @@ function createPhotoDiary(scene, photosRef) {
     '/photos/WhatsApp Image 2025-12-05 at 2.29.34 PM (1).jpeg',
     '/photos/WhatsApp Image 2025-12-05 at 2.29.34 PM.jpeg',
     '/photos/WhatsApp Image 2025-12-05 at 2.29.35 PM (1).jpeg',
-    '/photos/WhatsApp Image 2025-12-05 at 2.29.35 PM.jpeg'
+    '/photos/WhatsApp Image 2025-12-05 at 2.29.35 PM.jpeg',
+    '/photos/WhatsApp Image 2025-12-06 at 1.16.49 PM.jpeg',
+    '/photos/WhatsApp Image 2025-12-06 at 1.16.49 PM (1).jpeg',
+    '/photos/WhatsApp Image 2025-12-06 at 1.16.49 PM (2).jpeg',
+    '/photos/WhatsApp Image 2025-12-06 at 1.16.50 PM.jpeg'
   ]
   
-  // Create 3 pages
-  for (let i = 0; i < 3; i++) {
-    const page = createDiaryPage(i, photoFiles.slice(i * 2, i * 2 + 3))
+  // Create 4 pages (increased from 3 to accommodate more photos)
+  for (let i = 0; i < 4; i++) {
+    const page = createDiaryPage(i, photoFiles.slice(i * 3, i * 3 + 3))
     page.position.set(0, 0, 0.01 * i)
     page.userData.pageNumber = i
     page.userData.isVisible = i === 0
@@ -2393,9 +2397,9 @@ function createCakePiece(scene) {
 }
 
 function createCharacter(scene) {
-  // Load first photo as character - BIGGER SIZE
+  // Load photo as character - BIGGER SIZE
   const loader = new THREE.TextureLoader()
-  const texture = loader.load('/photos/WhatsApp Image 2025-12-05 at 11.27.31 AM.jpeg')
+  const texture = loader.load('/photos/WhatsApp Image 2025-12-06 at 1.16.49 PM (2).jpeg')
   
   const geometry = new THREE.PlaneGeometry(2.5, 3.5) // Much bigger!
   const material = new THREE.MeshBasicMaterial({ 
@@ -2413,13 +2417,18 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
   // Load eating sound and slow it down by 15%
   const audio = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
   audio.playbackRate = 0.85 // 15% slower
+  audio.volume = 1.0 // Full volume for eating sound
   
   // Preload audio for better mobile support
+  audio.preload = 'auto'
   audio.load()
   
   // Enable audio on mobile by setting attributes
   audio.setAttribute('playsinline', '')
   audio.setAttribute('webkit-playsinline', '')
+  
+  // Store audio in scene for potential cleanup
+  scene.userData.eatingAudio = audio
   
   const startTime = Date.now()
   const walkDuration = 6000 // Walk duration (6 seconds)
@@ -2454,7 +2463,7 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
         const fadeOut = () => {
           const elapsed = Date.now() - fadeOutStart
           const progress = Math.min(elapsed / fadeOutDuration, 1)
-          bgm.volume = originalVolume * (1 - progress * 0.85) // Lower to 15% of original (much quieter)
+          bgm.volume = originalVolume * (1 - progress * 0.92) // Lower to 8% of original (very quiet)
           
           if (progress < 1) {
             requestAnimationFrame(fadeOut)
@@ -2464,17 +2473,43 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
       }
       
       // Try to play audio with better mobile support
-      const playAudio = () => {
-        audio.play().catch((error) => {
-          console.log('Audio play failed, retrying...', error)
-          // Retry after a short delay
-          setTimeout(() => {
-            audio.play().catch(() => console.log('Audio play failed again'))
-          }, 100)
-        })
-      }
+      // Wait for BGM to fade before playing eating sound for better mobile compatibility
+      setTimeout(() => {
+        let playCount = 0
+        const maxPlays = 2 // Play 1.5 times (original + 0.5 more)
+        
+        const playAudio = () => {
+          // Ensure audio is ready
+          if (audio.readyState >= 2) {
+            audio.play().catch((error) => {
+              console.log('Audio play failed, retrying...', error)
+              // Retry after a short delay
+              setTimeout(() => {
+                audio.play().catch(() => console.log('Audio play failed again'))
+              }, 200)
+            })
+          } else {
+            // Wait for audio to be ready
+            audio.addEventListener('canplay', () => {
+              audio.play().catch(() => console.log('Audio not ready'))
+            }, { once: true })
+          }
+        }
+        
+        // Play audio and replay for 50% more duration
+        const handleAudioEnd = () => {
+          playCount++
+          if (playCount < maxPlays) {
+            // Replay the audio (this gives us 50% more time total)
+            audio.currentTime = 0
+            playAudio()
+          }
+        }
+        
+        audio.addEventListener('ended', handleAudioEnd)
+        playAudio()
+      }, 600) // Wait for BGM fade to complete
       
-      playAudio()
       eatCake()
       return // Exit after starting eating
     }
