@@ -38,34 +38,55 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
     // Detect if mobile device
     const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
     scene.userData.isMobile = isMobileDevice
-    
-    // Create Web Audio API context for mobile compatibility (allows multiple sounds)
-    const AudioContext = window.AudioContext || window.webkitAudioContext
-    const audioContext = new AudioContext()
-    
-    // Create gain nodes for volume control
-    const bgmGainNode = audioContext.createGain()
-    bgmGainNode.gain.value = 0.4 // 40% volume
-    bgmGainNode.connect(audioContext.destination)
-    
-    const sfxGainNode = audioContext.createGain()
-    sfxGainNode.gain.value = 1.0 // 100% volume for sound effects
-    sfxGainNode.connect(audioContext.destination)
-    
-    // Store audio context and gain nodes in scene
-    scene.userData.audioContext = audioContext
-    scene.userData.bgmGainNode = bgmGainNode
-    scene.userData.sfxGainNode = sfxGainNode
     scene.userData.audioUnlocked = false // Track if audio has been unlocked
     
-    // Preload eating sound early for better mobile support
-    const eatingAudioPreload = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
-    eatingAudioPreload.preload = 'auto'
-    eatingAudioPreload.load()
-    console.log('Preloading eating sound for better mobile support')
+    console.log('🔍 Device detection - isMobile:', isMobileDevice)
     
-    // On mobile: Skip BGM, only play eating sound for better compatibility
-    if (!isMobileDevice) {
+    // MOBILE: Simple audio only, no Web Audio API
+    if (isMobileDevice) {
+      console.log('📱 MOBILE MODE: Only eating sound will play (no BGM, no Web Audio API)')
+      
+      // Preload eating sound for mobile
+      const eatingAudioPreload = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
+      eatingAudioPreload.preload = 'auto'
+      eatingAudioPreload.setAttribute('playsinline', '')
+      eatingAudioPreload.setAttribute('webkit-playsinline', '')
+      eatingAudioPreload.load()
+      console.log('✅ Eating sound preloaded for mobile')
+      
+      // Store null values for desktop-only features
+      scene.userData.audioContext = null
+      scene.userData.bgmGainNode = null
+      scene.userData.sfxGainNode = null
+    }
+    // DESKTOP: Full Web Audio API with BGM
+    else {
+      console.log('💻 DESKTOP MODE: BGM + eating sound with Web Audio API')
+      
+      // Create Web Audio API context for desktop (allows multiple sounds with mixing)
+      const AudioContext = window.AudioContext || window.webkitAudioContext
+      const audioContext = new AudioContext()
+      
+      // Create gain nodes for volume control
+      const bgmGainNode = audioContext.createGain()
+      bgmGainNode.gain.value = 0.4 // 40% volume
+      bgmGainNode.connect(audioContext.destination)
+      
+      const sfxGainNode = audioContext.createGain()
+      sfxGainNode.gain.value = 1.0 // 100% volume for sound effects
+      sfxGainNode.connect(audioContext.destination)
+      
+      // Store audio context and gain nodes in scene
+      scene.userData.audioContext = audioContext
+      scene.userData.bgmGainNode = bgmGainNode
+      scene.userData.sfxGainNode = sfxGainNode
+      
+      // Preload eating sound for desktop
+      const eatingAudioPreload = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
+      eatingAudioPreload.preload = 'auto'
+      eatingAudioPreload.load()
+      console.log('✅ Eating sound preloaded for desktop')
+      
       // Initialize background music with Web Audio API (desktop only)
       const bgm = new Audio('/audio/D4vd_-_Here_with_me_(mp3.pm).mp3')
       bgm.loop = true
@@ -112,8 +133,6 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
       
       // Store BGM in scene for access by other functions
       scene.userData.bgm = bgm
-    } else {
-      console.log('Mobile device detected - BGM disabled, eating sound only')
     }
     
     // Add cosmic vortex background
@@ -957,26 +976,35 @@ function handleCandleClick(event, scene, camera, candlesRef, candlesBlownRef, on
   // CRITICAL: Unlock audio on first user interaction (mobile fix)
   if (!scene.userData.audioUnlocked) {
     scene.userData.audioUnlocked = true
-    const audioContext = scene.userData.audioContext
+    console.log('🔓 Unlocking audio on first user interaction')
     
-    if (audioContext && audioContext.state === 'suspended') {
-      console.log('Unlocking audio context on first user interaction')
+    const audioContext = scene.userData.audioContext
+    const isMobile = scene.userData.isMobile
+    
+    // Desktop: Resume audio context
+    if (!isMobile && audioContext && audioContext.state === 'suspended') {
+      console.log('Desktop: Resuming audio context')
       audioContext.resume().then(() => {
-        console.log('Audio context unlocked successfully')
+        console.log('✅ Audio context resumed')
       }).catch(err => {
-        console.log('Failed to unlock audio context:', err)
+        console.log('❌ Failed to resume audio context:', err)
       })
     }
     
-    // Play a silent audio to unlock mobile audio playback
-    const silentAudio = new Audio()
-    silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAADhAC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAA4T/////////////////AAAAAAAAAAAAAAAAAAAAAP/7kGQAD/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7kGQAD/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ=='
-    silentAudio.volume = 0
-    silentAudio.play().then(() => {
-      console.log('Silent audio played - mobile audio unlocked')
-    }).catch(err => {
-      console.log('Silent audio failed:', err)
-    })
+    // Mobile: Play a silent audio to unlock audio playback
+    if (isMobile) {
+      console.log('📱 Mobile: Playing silent audio to unlock')
+      const silentAudio = new Audio()
+      silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAADhAC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAA4T/////////////////AAAAAAAAAAAAAAAAAAAAAP/7kGQAD/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7kGQAD/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ=='
+      silentAudio.volume = 0
+      silentAudio.setAttribute('playsinline', '')
+      silentAudio.setAttribute('webkit-playsinline', '')
+      silentAudio.play().then(() => {
+        console.log('✅ Silent audio played - mobile audio unlocked!')
+      }).catch(err => {
+        console.log('❌ Silent audio failed:', err)
+      })
+    }
   }
   
   // Intersect against all child meshes for larger target
@@ -2485,39 +2513,38 @@ function createCharacter(scene) {
 }
 
 function animateCharacterEating(character, cakePiece, scene, onComplete) {
-  // Get Web Audio API context from scene
   const audioContext = scene.userData.audioContext
   const sfxGainNode = scene.userData.sfxGainNode
   const isMobile = scene.userData.isMobile
   
-  // MOBILE FIX: Create completely separate audio element for mobile
-  // Don't use Web Audio API on mobile - just simple audio element
+  console.log('🍰 Starting eating animation - isMobile:', isMobile)
+  
+  // Create eating sound audio element
   const audio = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
   audio.playbackRate = 0.85 // 15% slower
   audio.volume = 1.0 // Full volume
   audio.preload = 'auto'
   audio.setAttribute('playsinline', '')
   audio.setAttribute('webkit-playsinline', '')
-  audio.muted = false
-  
-  // Force load the audio immediately
   audio.load()
   
-  // On desktop only: Connect to Web Audio API for mixing with BGM
-  if (!isMobile) {
+  // MOBILE: Simple audio element only (no Web Audio API)
+  if (isMobile) {
+    console.log('📱 Mobile: Using simple <audio> element for eating sound')
+  }
+  // DESKTOP: Connect to Web Audio API for mixing with BGM
+  else {
     try {
       audio.crossOrigin = 'anonymous'
       const audioSource = audioContext.createMediaElementSource(audio)
       audioSource.connect(sfxGainNode)
-      console.log('Desktop: Connected eating sound to Web Audio API')
+      console.log('💻 Desktop: Connected eating sound to Web Audio API')
     } catch (error) {
-      console.log('MediaElementSource error (will use fallback):', error)
+      console.log('⚠️ MediaElementSource error (using fallback):', error)
     }
-  } else {
-    console.log('Mobile detected: Using simple audio element (no Web Audio API)')
   }
   
-  // Store audio in scene for potential cleanup
+  // Store audio in scene
   scene.userData.eatingAudio = audio
   
   const startTime = Date.now()
@@ -2564,10 +2591,11 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
         fadeOut()
       }
       
-      // SIMPLIFIED AUDIO PLAYBACK - More aggressive for mobile
+      // PLAY EATING SOUND
       setTimeout(() => {
-        // Resume audio context if needed (desktop only)
+        // Desktop: Resume audio context if needed
         if (!isMobile && audioContext && audioContext.state === 'suspended') {
+          console.log('💻 Resuming audio context for desktop')
           audioContext.resume()
         }
         
@@ -2575,19 +2603,21 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
         const maxPlays = 2 // Play twice (100% more = 50% additional time)
         
         const playAudio = () => {
-          console.log('🔊 PLAYING EATING SOUND - isMobile:', isMobile, 'readyState:', audio.readyState)
+          console.log('🔊 PLAYING EATING SOUND')
+          console.log('   - Device:', isMobile ? 'Mobile 📱' : 'Desktop 💻')
+          console.log('   - Audio ready:', audio.readyState >= 2 ? 'Yes ✅' : 'No ❌')
           
-          // Just play it - no complex checks
+          // Play the audio
           audio.play()
             .then(() => {
-              console.log('✅ Eating audio playing successfully!')
+              console.log('✅ SUCCESS: Eating audio is playing!')
             })
             .catch((error) => {
-              console.error('❌ Audio play failed:', error.name, error.message)
-              // Try one more time after a short delay
+              console.error('❌ FAILED to play eating audio:', error.name, error.message)
+              // Retry once
               setTimeout(() => {
                 console.log('🔄 Retrying audio play...')
-                audio.play().catch(e => console.error('❌ Retry failed:', e))
+                audio.play().catch(e => console.error('❌ Retry also failed:', e.message))
               }, 200)
             })
         }
@@ -2595,7 +2625,7 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
         // Replay audio for 50% more duration
         audio.addEventListener('ended', () => {
           playCount++
-          console.log('Audio ended, playCount:', playCount)
+          console.log('🔁 Audio ended, playCount:', playCount, '/', maxPlays)
           if (playCount < maxPlays) {
             audio.currentTime = 0
             playAudio()
