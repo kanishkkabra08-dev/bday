@@ -2462,14 +2462,20 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
   audio.setAttribute('webkit-playsinline', '')
   
   // Connect eating audio to Web Audio API (allows playing with BGM on mobile)
-  const audioSource = audioContext.createMediaElementSource(audio)
-  audioSource.connect(sfxGainNode)
+  // Wrap in try-catch for mobile compatibility
+  try {
+    const audioSource = audioContext.createMediaElementSource(audio)
+    audioSource.connect(sfxGainNode)
+  } catch (error) {
+    console.log('MediaElementSource already created or error:', error)
+    // Fallback: audio will still play without Web Audio API connection
+  }
   
   // Store audio in scene for potential cleanup
   scene.userData.eatingAudio = audio
   
   const startTime = Date.now()
-  const walkDuration = 6000 // Walk duration (6 seconds)
+  const walkDuration = 7500 // Walk duration (7.5 seconds - 25% slower)
   
   // Phase 1: NATURAL WALKING from RIGHT with subtle movement
   let hasReachedCake = false
@@ -2495,13 +2501,15 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
       const bgmGainNode = scene.userData.bgmGainNode
       if (bgmGainNode) {
         const fadeOutStart = Date.now()
-        const fadeOutDuration = 500
+        const fadeOutDuration = 1500 // Longer fade for smoother transition
         const originalVolume = bgmGainNode.gain.value
         
         const fadeOut = () => {
           const elapsed = Date.now() - fadeOutStart
           const progress = Math.min(elapsed / fadeOutDuration, 1)
-          bgmGainNode.gain.value = originalVolume * (1 - progress * 0.97) // Lower to 3% of original (almost silent)
+          // Smooth exponential fade
+          const easedProgress = 1 - Math.pow(1 - progress, 3)
+          bgmGainNode.gain.value = originalVolume * (1 - easedProgress * 0.95) // Lower to 5% with smooth curve
           
           if (progress < 1) {
             requestAnimationFrame(fadeOut)
@@ -2622,14 +2630,16 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
         const bgmGainNode = scene.userData.bgmGainNode
         if (bgmGainNode) {
           const fadeInStart = Date.now()
-          const fadeInDuration = 1000
+          const fadeInDuration = 2000 // Longer fade for smoother transition
           const currentVolume = bgmGainNode.gain.value
           const targetVolume = 0.4 // Original volume
           
           const fadeIn = () => {
             const elapsed = Date.now() - fadeInStart
             const progress = Math.min(elapsed / fadeInDuration, 1)
-            bgmGainNode.gain.value = currentVolume + (targetVolume - currentVolume) * progress
+            // Smooth exponential fade in
+            const easedProgress = 1 - Math.pow(1 - progress, 3)
+            bgmGainNode.gain.value = currentVolume + (targetVolume - currentVolume) * easedProgress
             
             if (progress < 1) {
               requestAnimationFrame(fadeIn)
