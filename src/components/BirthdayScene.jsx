@@ -2490,32 +2490,31 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
   const sfxGainNode = scene.userData.sfxGainNode
   const isMobile = scene.userData.isMobile
   
-  // Load eating sound and slow it down by 15%
+  // MOBILE FIX: Create completely separate audio element for mobile
+  // Don't use Web Audio API on mobile - just simple audio element
   const audio = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
   audio.playbackRate = 0.85 // 15% slower
   audio.volume = 1.0 // Full volume
-  
-  // Preload audio for better mobile support
   audio.preload = 'auto'
-  audio.load()
-  
-  // Enable audio on mobile by setting attributes
   audio.setAttribute('playsinline', '')
   audio.setAttribute('webkit-playsinline', '')
+  audio.muted = false
   
-  // On desktop: Connect to Web Audio API for mixing with BGM
-  // On mobile: Use simple audio element for better compatibility
+  // Force load the audio immediately
+  audio.load()
+  
+  // On desktop only: Connect to Web Audio API for mixing with BGM
   if (!isMobile) {
     try {
       audio.crossOrigin = 'anonymous'
       const audioSource = audioContext.createMediaElementSource(audio)
       audioSource.connect(sfxGainNode)
+      console.log('Desktop: Connected eating sound to Web Audio API')
     } catch (error) {
-      console.log('MediaElementSource error:', error)
-      // Fallback: audio will still play without Web Audio API connection
+      console.log('MediaElementSource error (will use fallback):', error)
     }
   } else {
-    console.log('Mobile: Using simple audio element for eating sound')
+    console.log('Mobile detected: Using simple audio element (no Web Audio API)')
   }
   
   // Store audio in scene for potential cleanup
@@ -2565,65 +2564,47 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
         fadeOut()
       }
       
-      // Try to play audio with better mobile support
-      // Wait for BGM to fade before playing eating sound for better mobile compatibility
+      // SIMPLIFIED AUDIO PLAYBACK - More aggressive for mobile
       setTimeout(() => {
-        // CRITICAL: Resume audio context if suspended (required for mobile)
-        if (audioContext && audioContext.state === 'suspended') {
-          console.log('Resuming audio context before playing eating sound')
-          audioContext.resume().then(() => {
-            console.log('Audio context resumed successfully')
-          }).catch(err => {
-            console.log('Failed to resume audio context:', err)
-          })
+        // Resume audio context if needed (desktop only)
+        if (!isMobile && audioContext && audioContext.state === 'suspended') {
+          audioContext.resume()
         }
         
         let playCount = 0
         const maxPlays = 2 // Play twice (100% more = 50% additional time)
         
         const playAudio = () => {
-          console.log('Attempting to play eating audio, readyState:', audio.readyState, 'isMobile:', isMobile)
+          console.log('🔊 PLAYING EATING SOUND - isMobile:', isMobile, 'readyState:', audio.readyState)
           
-          // Ensure audio is ready
-          if (audio.readyState < 2) {
-            console.log('Audio not ready, waiting...')
-            audio.addEventListener('canplay', () => {
-              console.log('Audio ready, playing now')
-              playAudio()
-            }, { once: true })
-            return
-          }
-          
-          // For mobile: Try to play immediately
-          const playPromise = audio.play()
-          
-          if (playPromise !== undefined) {
-            playPromise.then(() => {
-              console.log('Eating audio playing successfully')
-            }).catch((error) => {
-              console.log('Audio play blocked:', error.name, error.message)
-              
-              // If blocked, this shouldn't happen since we unlocked on first candle click
-              // But just in case, log it
-              console.error('Audio still blocked despite unlock attempt. This should not happen.')
+          // Just play it - no complex checks
+          audio.play()
+            .then(() => {
+              console.log('✅ Eating audio playing successfully!')
             })
-          }
+            .catch((error) => {
+              console.error('❌ Audio play failed:', error.name, error.message)
+              // Try one more time after a short delay
+              setTimeout(() => {
+                console.log('🔄 Retrying audio play...')
+                audio.play().catch(e => console.error('❌ Retry failed:', e))
+              }, 200)
+            })
         }
         
-        // Play audio and replay for 50% more duration
-        const handleAudioEnd = () => {
+        // Replay audio for 50% more duration
+        audio.addEventListener('ended', () => {
           playCount++
-          console.log('Audio ended, playCount:', playCount, 'maxPlays:', maxPlays)
+          console.log('Audio ended, playCount:', playCount)
           if (playCount < maxPlays) {
-            // Replay the audio (this gives us 50% more time total)
             audio.currentTime = 0
             playAudio()
           }
-        }
+        })
         
-        audio.addEventListener('ended', handleAudioEnd)
+        // Start playing
         playAudio()
-      }, 100) // Play eating sound earlier (100ms delay)
+      }, 100)
       
       eatCake()
       return // Exit after starting eating
