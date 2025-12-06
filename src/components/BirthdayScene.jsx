@@ -35,17 +35,45 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
     scene.background = new THREE.Color(0x0a0015) // Deep space purple
     sceneRef.current = scene
     
-    // Initialize background music with mobile support
-    const bgm = new Audio('/audio/Perfect-(Mr-Jat.in).mp3')
+    // Create Web Audio API context for mobile compatibility (allows multiple sounds)
+    const AudioContext = window.AudioContext || window.webkitAudioContext
+    const audioContext = new AudioContext()
+    
+    // Create gain nodes for volume control
+    const bgmGainNode = audioContext.createGain()
+    bgmGainNode.gain.value = 0.4 // 40% volume
+    bgmGainNode.connect(audioContext.destination)
+    
+    const sfxGainNode = audioContext.createGain()
+    sfxGainNode.gain.value = 1.0 // 100% volume for sound effects
+    sfxGainNode.connect(audioContext.destination)
+    
+    // Store audio context and gain nodes in scene
+    scene.userData.audioContext = audioContext
+    scene.userData.bgmGainNode = bgmGainNode
+    scene.userData.sfxGainNode = sfxGainNode
+    
+    // Initialize background music with Web Audio API
+    const bgm = new Audio('/audio/D4vd_-_Here_with_me_(mp3.pm).mp3')
     bgm.loop = true
-    bgm.volume = 0.4 // Start at 40% volume
+    bgm.crossOrigin = 'anonymous'
     bgm.setAttribute('playsinline', '')
     bgm.setAttribute('webkit-playsinline', '')
     bgm.preload = 'auto'
+    
+    // Connect BGM to Web Audio API
+    const bgmSource = audioContext.createMediaElementSource(bgm)
+    bgmSource.connect(bgmGainNode)
+    
     bgmRef.current = bgm
     
     // Start playing BGM (with user interaction handling for mobile)
     const startBGM = () => {
+      // Resume audio context on user interaction (required for mobile)
+      if (audioContext.state === 'suspended') {
+        audioContext.resume()
+      }
+      
       const playPromise = bgm.play()
       
       if (playPromise !== undefined) {
@@ -53,7 +81,9 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
           console.log('BGM autoplay blocked, waiting for user interaction')
           // If autoplay is blocked, try again on first user interaction
           const playOnInteraction = () => {
-            bgm.play().catch(() => console.log('BGM play failed'))
+            audioContext.resume().then(() => {
+              bgm.play().catch(() => console.log('BGM play failed'))
+            })
             document.removeEventListener('click', playOnInteraction)
             document.removeEventListener('touchstart', playOnInteraction)
           }
@@ -2414,10 +2444,14 @@ function createCharacter(scene) {
 }
 
 function animateCharacterEating(character, cakePiece, scene, onComplete) {
+  // Get Web Audio API context from scene
+  const audioContext = scene.userData.audioContext
+  const sfxGainNode = scene.userData.sfxGainNode
+  
   // Load eating sound and slow it down by 15%
   const audio = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
   audio.playbackRate = 0.85 // 15% slower
-  audio.volume = 1.0 // Full volume for eating sound
+  audio.crossOrigin = 'anonymous'
   
   // Preload audio for better mobile support
   audio.preload = 'auto'
@@ -2426,6 +2460,10 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
   // Enable audio on mobile by setting attributes
   audio.setAttribute('playsinline', '')
   audio.setAttribute('webkit-playsinline', '')
+  
+  // Connect eating audio to Web Audio API (allows playing with BGM on mobile)
+  const audioSource = audioContext.createMediaElementSource(audio)
+  audioSource.connect(sfxGainNode)
   
   // Store audio in scene for potential cleanup
   scene.userData.eatingAudio = audio
@@ -2453,17 +2491,17 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
       character.rotation.z = 0
       
       // Phase 2: Eat cake slowly
-      // Lower BGM volume when eating sound starts
-      const bgm = scene.userData.bgm
-      if (bgm) {
+      // Lower BGM volume when eating sound starts using Web Audio API gain node
+      const bgmGainNode = scene.userData.bgmGainNode
+      if (bgmGainNode) {
         const fadeOutStart = Date.now()
         const fadeOutDuration = 500
-        const originalVolume = bgm.volume
+        const originalVolume = bgmGainNode.gain.value
         
         const fadeOut = () => {
           const elapsed = Date.now() - fadeOutStart
           const progress = Math.min(elapsed / fadeOutDuration, 1)
-          bgm.volume = originalVolume * (1 - progress * 0.92) // Lower to 8% of original (very quiet)
+          bgmGainNode.gain.value = originalVolume * (1 - progress * 0.97) // Lower to 3% of original (almost silent)
           
           if (progress < 1) {
             requestAnimationFrame(fadeOut)
@@ -2475,6 +2513,11 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
       // Try to play audio with better mobile support
       // Wait for BGM to fade before playing eating sound for better mobile compatibility
       setTimeout(() => {
+        // Resume audio context if suspended (required for mobile)
+        if (audioContext.state === 'suspended') {
+          audioContext.resume()
+        }
+        
         let playCount = 0
         const maxPlays = 2 // Play 1.5 times (original + 0.5 more)
         
@@ -2508,7 +2551,7 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
         
         audio.addEventListener('ended', handleAudioEnd)
         playAudio()
-      }, 600) // Wait for BGM fade to complete
+      }, 100) // Play eating sound earlier (100ms delay)
       
       eatCake()
       return // Exit after starting eating
@@ -2575,18 +2618,18 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
         // Remove cake piece
         scene.remove(cakePiece)
         
-        // Restore BGM volume after eating ends
-        const bgm = scene.userData.bgm
-        if (bgm) {
+        // Restore BGM volume after eating ends using Web Audio API gain node
+        const bgmGainNode = scene.userData.bgmGainNode
+        if (bgmGainNode) {
           const fadeInStart = Date.now()
           const fadeInDuration = 1000
-          const currentVolume = bgm.volume
+          const currentVolume = bgmGainNode.gain.value
           const targetVolume = 0.4 // Original volume
           
           const fadeIn = () => {
             const elapsed = Date.now() - fadeInStart
             const progress = Math.min(elapsed / fadeInDuration, 1)
-            bgm.volume = currentVolume + (targetVolume - currentVolume) * progress
+            bgmGainNode.gain.value = currentVolume + (targetVolume - currentVolume) * progress
             
             if (progress < 1) {
               requestAnimationFrame(fadeIn)
