@@ -35,6 +35,10 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
     scene.background = new THREE.Color(0x0a0015) // Deep space purple
     sceneRef.current = scene
     
+    // Detect if mobile device
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    scene.userData.isMobile = isMobileDevice
+    
     // Create Web Audio API context for mobile compatibility (allows multiple sounds)
     const AudioContext = window.AudioContext || window.webkitAudioContext
     const audioContext = new AudioContext()
@@ -53,52 +57,57 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
     scene.userData.bgmGainNode = bgmGainNode
     scene.userData.sfxGainNode = sfxGainNode
     
-    // Initialize background music with Web Audio API
-    const bgm = new Audio('/audio/D4vd_-_Here_with_me_(mp3.pm).mp3')
-    bgm.loop = true
-    bgm.crossOrigin = 'anonymous'
-    bgm.setAttribute('playsinline', '')
-    bgm.setAttribute('webkit-playsinline', '')
-    bgm.preload = 'auto'
-    
-    // Connect BGM to Web Audio API
-    const bgmSource = audioContext.createMediaElementSource(bgm)
-    bgmSource.connect(bgmGainNode)
-    
-    bgmRef.current = bgm
-    
-    // Start playing BGM (with user interaction handling for mobile)
-    const startBGM = () => {
-      // Resume audio context on user interaction (required for mobile)
-      if (audioContext.state === 'suspended') {
-        audioContext.resume()
+    // On mobile: Skip BGM, only play eating sound for better compatibility
+    if (!isMobileDevice) {
+      // Initialize background music with Web Audio API (desktop only)
+      const bgm = new Audio('/audio/D4vd_-_Here_with_me_(mp3.pm).mp3')
+      bgm.loop = true
+      bgm.crossOrigin = 'anonymous'
+      bgm.setAttribute('playsinline', '')
+      bgm.setAttribute('webkit-playsinline', '')
+      bgm.preload = 'auto'
+      
+      // Connect BGM to Web Audio API
+      const bgmSource = audioContext.createMediaElementSource(bgm)
+      bgmSource.connect(bgmGainNode)
+      
+      bgmRef.current = bgm
+      
+      // Start playing BGM (with user interaction handling)
+      const startBGM = () => {
+        // Resume audio context on user interaction (required for mobile)
+        if (audioContext.state === 'suspended') {
+          audioContext.resume()
+        }
+        
+        const playPromise = bgm.play()
+        
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            console.log('BGM autoplay blocked, waiting for user interaction')
+            // If autoplay is blocked, try again on first user interaction
+            const playOnInteraction = () => {
+              audioContext.resume().then(() => {
+                bgm.play().catch(() => console.log('BGM play failed'))
+              })
+              document.removeEventListener('click', playOnInteraction)
+              document.removeEventListener('touchstart', playOnInteraction)
+            }
+            
+            document.addEventListener('click', playOnInteraction, { once: true })
+            document.addEventListener('touchstart', playOnInteraction, { once: true })
+          })
+        }
       }
       
-      const playPromise = bgm.play()
+      // Delay BGM start slightly to improve loading
+      setTimeout(startBGM, 500)
       
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          console.log('BGM autoplay blocked, waiting for user interaction')
-          // If autoplay is blocked, try again on first user interaction
-          const playOnInteraction = () => {
-            audioContext.resume().then(() => {
-              bgm.play().catch(() => console.log('BGM play failed'))
-            })
-            document.removeEventListener('click', playOnInteraction)
-            document.removeEventListener('touchstart', playOnInteraction)
-          }
-          
-          document.addEventListener('click', playOnInteraction, { once: true })
-          document.addEventListener('touchstart', playOnInteraction, { once: true })
-        })
-      }
+      // Store BGM in scene for access by other functions
+      scene.userData.bgm = bgm
+    } else {
+      console.log('Mobile device detected - BGM disabled, eating sound only')
     }
-    
-    // Delay BGM start slightly to improve loading
-    setTimeout(startBGM, 500)
-    
-    // Store BGM in scene for access by other functions
-    scene.userData.bgm = bgm
     
     // Add cosmic vortex background
     createCosmicVortexBackground(scene)
@@ -2447,11 +2456,12 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
   // Get Web Audio API context from scene
   const audioContext = scene.userData.audioContext
   const sfxGainNode = scene.userData.sfxGainNode
+  const isMobile = scene.userData.isMobile
   
   // Load eating sound and slow it down by 15%
   const audio = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
   audio.playbackRate = 0.85 // 15% slower
-  audio.crossOrigin = 'anonymous'
+  audio.volume = 1.0 // Full volume
   
   // Preload audio for better mobile support
   audio.preload = 'auto'
@@ -2461,14 +2471,19 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
   audio.setAttribute('playsinline', '')
   audio.setAttribute('webkit-playsinline', '')
   
-  // Connect eating audio to Web Audio API (allows playing with BGM on mobile)
-  // Wrap in try-catch for mobile compatibility
-  try {
-    const audioSource = audioContext.createMediaElementSource(audio)
-    audioSource.connect(sfxGainNode)
-  } catch (error) {
-    console.log('MediaElementSource already created or error:', error)
-    // Fallback: audio will still play without Web Audio API connection
+  // On desktop: Connect to Web Audio API for mixing with BGM
+  // On mobile: Use simple audio element for better compatibility
+  if (!isMobile) {
+    try {
+      audio.crossOrigin = 'anonymous'
+      const audioSource = audioContext.createMediaElementSource(audio)
+      audioSource.connect(sfxGainNode)
+    } catch (error) {
+      console.log('MediaElementSource error:', error)
+      // Fallback: audio will still play without Web Audio API connection
+    }
+  } else {
+    console.log('Mobile: Using simple audio element for eating sound')
   }
   
   // Store audio in scene for potential cleanup
