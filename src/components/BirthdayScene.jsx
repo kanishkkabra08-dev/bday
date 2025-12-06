@@ -56,6 +56,13 @@ const BirthdayScene = ({ currentStep, onStepChange }) => {
     scene.userData.audioContext = audioContext
     scene.userData.bgmGainNode = bgmGainNode
     scene.userData.sfxGainNode = sfxGainNode
+    scene.userData.audioUnlocked = false // Track if audio has been unlocked
+    
+    // Preload eating sound early for better mobile support
+    const eatingAudioPreload = new Audio('/audio/Minecraft Eating - Sound Effect (HD) - Gaming Sound FX (youtube).mp3')
+    eatingAudioPreload.preload = 'auto'
+    eatingAudioPreload.load()
+    console.log('Preloading eating sound for better mobile support')
     
     // On mobile: Skip BGM, only play eating sound for better compatibility
     if (!isMobileDevice) {
@@ -946,6 +953,31 @@ function handleCandleClick(event, scene, camera, candlesRef, candlesBlownRef, on
   
   const raycaster = new THREE.Raycaster()
   raycaster.setFromCamera(mouse, camera)
+  
+  // CRITICAL: Unlock audio on first user interaction (mobile fix)
+  if (!scene.userData.audioUnlocked) {
+    scene.userData.audioUnlocked = true
+    const audioContext = scene.userData.audioContext
+    
+    if (audioContext && audioContext.state === 'suspended') {
+      console.log('Unlocking audio context on first user interaction')
+      audioContext.resume().then(() => {
+        console.log('Audio context unlocked successfully')
+      }).catch(err => {
+        console.log('Failed to unlock audio context:', err)
+      })
+    }
+    
+    // Play a silent audio to unlock mobile audio playback
+    const silentAudio = new Audio()
+    silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAADhAC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAA4T/////////////////AAAAAAAAAAAAAAAAAAAAAP/7kGQAD/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVf/7kGQAD/AAAGkAAAAIAAANIAAAAQAAAaQAAAAgAAA0gAAABFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVQ=='
+    silentAudio.volume = 0
+    silentAudio.play().then(() => {
+      console.log('Silent audio played - mobile audio unlocked')
+    }).catch(err => {
+      console.log('Silent audio failed:', err)
+    })
+  }
   
   // Intersect against all child meshes for larger target
   const intersectTargets = candlesRef.current.flatMap(c => c.children)
@@ -2536,35 +2568,52 @@ function animateCharacterEating(character, cakePiece, scene, onComplete) {
       // Try to play audio with better mobile support
       // Wait for BGM to fade before playing eating sound for better mobile compatibility
       setTimeout(() => {
-        // Resume audio context if suspended (required for mobile)
-        if (audioContext.state === 'suspended') {
-          audioContext.resume()
+        // CRITICAL: Resume audio context if suspended (required for mobile)
+        if (audioContext && audioContext.state === 'suspended') {
+          console.log('Resuming audio context before playing eating sound')
+          audioContext.resume().then(() => {
+            console.log('Audio context resumed successfully')
+          }).catch(err => {
+            console.log('Failed to resume audio context:', err)
+          })
         }
         
         let playCount = 0
-        const maxPlays = 2 // Play 1.5 times (original + 0.5 more)
+        const maxPlays = 2 // Play twice (100% more = 50% additional time)
         
         const playAudio = () => {
+          console.log('Attempting to play eating audio, readyState:', audio.readyState, 'isMobile:', isMobile)
+          
           // Ensure audio is ready
-          if (audio.readyState >= 2) {
-            audio.play().catch((error) => {
-              console.log('Audio play failed, retrying...', error)
-              // Retry after a short delay
-              setTimeout(() => {
-                audio.play().catch(() => console.log('Audio play failed again'))
-              }, 200)
-            })
-          } else {
-            // Wait for audio to be ready
+          if (audio.readyState < 2) {
+            console.log('Audio not ready, waiting...')
             audio.addEventListener('canplay', () => {
-              audio.play().catch(() => console.log('Audio not ready'))
+              console.log('Audio ready, playing now')
+              playAudio()
             }, { once: true })
+            return
+          }
+          
+          // For mobile: Try to play immediately
+          const playPromise = audio.play()
+          
+          if (playPromise !== undefined) {
+            playPromise.then(() => {
+              console.log('Eating audio playing successfully')
+            }).catch((error) => {
+              console.log('Audio play blocked:', error.name, error.message)
+              
+              // If blocked, this shouldn't happen since we unlocked on first candle click
+              // But just in case, log it
+              console.error('Audio still blocked despite unlock attempt. This should not happen.')
+            })
           }
         }
         
         // Play audio and replay for 50% more duration
         const handleAudioEnd = () => {
           playCount++
+          console.log('Audio ended, playCount:', playCount, 'maxPlays:', maxPlays)
           if (playCount < maxPlays) {
             // Replay the audio (this gives us 50% more time total)
             audio.currentTime = 0
